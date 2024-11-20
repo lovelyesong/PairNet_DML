@@ -2,4 +2,8 @@ results/experiments_benchmarking/ihdp/TARNet2/
 results/experiments_benchmarking/ihdp/TARNet
 results/experiments_benchmarking/ihdp/TARNet/*
 results/experiments_benchmarking/ihdp/TARNet2/*
+catenets/datasets/data/bonus_data.train.npz
+catenets/datasets/data/bonus_data.test.npz
+catenets/datasets/data/ihdp_npci_1-100.train.npz
+catenets/datasets/data/ihdp_npci_1-100.test.npz
 
