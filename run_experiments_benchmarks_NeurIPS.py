@@ -23,6 +23,10 @@ from experiments.experiments_benchmarks_NeurIPS21.twins_experiments_catenets imp
     do_twins_experiment_loop,
 )
 
+from experiments.experiments_benchmarks_NeurIPS21.bonus_experiments_catenets import (
+    do_bonus_experiments,
+)
+
 log.add(sink=sys.stderr, level="DEBUG")
 
 
@@ -60,6 +64,17 @@ if __name__ == "__main__":
             pre_trans=args.pre_trans,
             save_reps=True,
         )
+
+    # for bonus data with DML
+    elif (args.experiment == "bonus") or (args.experiment == "Bonus"):
+        do_bonus_experiments(file_name=args.file_name,
+                             n_exp=args.n_exp,
+                             setting=args.setting,
+                             n_reps=args.n_reps,
+                             save_reps=True,
+                             )
+
+
     elif (args.experiment == "twins") or (args.experiment == "Twins"):
         do_twins_experiment_loop(file_name=args.file_name, n_exp=args.n_reps)
 

@@ -8,14 +8,16 @@ from typing import Optional, Union
 from catenets.models.torch import representation_nets as torch_nets
 import copy
 import torch
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import KFold
 
 import numpy as np
 from sklearn import clone
 
-from catenets.datasets.dataset_ihdp import (
+from catenets.datasets.dataset_bonus import (
     get_one_data_set,
     load_raw,
-    prepare_ihdp_pairnet_data,
+    prepare_bonus_pairnet_data,
 )
 from catenets.datasets.torch_dataset import (
     BaseTorchDataset as TorchDS,
@@ -23,24 +25,24 @@ from catenets.datasets.torch_dataset import (
 from catenets.experiment_utils.base import eval_root_mse
 
 from catenets.models.jax import (
-    RNET_NAME,
-    T_NAME,
+    # RNET_NAME,
+    # T_NAME,
     TARNET_NAME,
-    CFRNET_NAME,
+    # CFRNET_NAME,
     PAIRNET_NAME,
-    XNET_NAME,
-    DRAGON_NAME,
-    FLEXTE_NAME,
-    DRNET_NAME,
-    RNet,
+    # XNET_NAME,
+    # DRAGON_NAME,
+    # FLEXTE_NAME,
+    # DRNET_NAME,
+    # RNet,
     TARNet,
-    CFRNet,
+    # CFRNet,
     PairNet,
-    FlexTENet,
-    DragonNet,
-    DRNet,
-    TNet,
-    XNet,
+    # FlexTENet,
+    # DragonNet,
+    # DRNet,
+    # TNet,
+    # XNet,
 )
 
 DATA_DIR = Path("catenets/datasets/data/")
@@ -67,7 +69,7 @@ PARAMS_DEPTH_2 = {
 }
 
 model_hypers = {
-    CFRNET_NAME: {"penalty_disc": 0.1},
+    # CFRNET_NAME: {"penalty_disc": 0.1},
     PAIRNET_NAME: {
         "penalty_disc": 0.0,
         "penalty_l2": 1.0,
@@ -91,32 +93,32 @@ def dict_to_str(dict):
 
 
 ALL_MODELS = {
-    T_NAME: TNet(**PARAMS_DEPTH),
+    # T_NAME: TNet(**PARAMS_DEPTH),
     TARNET_NAME: TARNet(**PARAMS_DEPTH),
-    CFRNET_NAME: CFRNet(**PARAMS_DEPTH),
+    # CFRNET_NAME: CFRNet(**PARAMS_DEPTH),
     PAIRNET_NAME: PairNet(**PARAMS_DEPTH),
-    RNET_NAME: RNet(**PARAMS_DEPTH_2),
-    XNET_NAME: XNet(**PARAMS_DEPTH_2),
-    FLEXTE_NAME: FlexTENet(
-        penalty_orthogonal=PENALTY_ORTHOGONAL, penalty_l2_p=PENALTY_DIFF, **PARAMS_DEPTH
-    ),
-    DRNET_NAME: DRNet(first_stage_strategy="Tar", **PARAMS_DEPTH_2),
-    DRAGON_NAME: DragonNet(**PARAMS_DEPTH),
+    # RNET_NAME: RNet(**PARAMS_DEPTH_2),
+    # XNET_NAME: XNet(**PARAMS_DEPTH_2),
+    # FLEXTE_NAME: FlexTENet(
+    #     penalty_orthogonal=PENALTY_ORTHOGONAL, penalty_l2_p=PENALTY_DIFF, **PARAMS_DEPTH
+    # ),
+    # DRNET_NAME: DRNet(first_stage_strategy="Tar", **PARAMS_DEPTH_2),
+    # DRAGON_NAME: DragonNet(**PARAMS_DEPTH),
 }
 
 
-def do_ihdp_experiments(
-    n_exp: Union[int, list] = 100,
-    n_reps: int = 1,
-    file_name: str = "ihdp_all",
-    model_params: Optional[dict] = None,
-    models: Optional[dict] = None,
-    setting: str = "original",
-    save_reps: bool = False,
+def do_bonus_experiments(
+        n_exp: Union[int, list] = 100,
+        n_reps: int = 1,
+        file_name: str = "ihdp_all",
+        model_params: Optional[dict] = None,
+        models: Optional[dict] = None,
+        setting: str = "original",
+        save_reps: bool = False,
 ) -> None:
     if models is None:
-        # models = ALL_MODELS
-        models = {PAIRNET_NAME: PairNet(**PARAMS_DEPTH)}
+        models = ALL_MODELS
+        # models = {PAIRNET_NAME: PairNet(**PARAMS_DEPTH)}
 
     if (setting == "original") or (setting == "C"):
         setting = "C"
@@ -132,17 +134,17 @@ def do_ihdp_experiments(
         os.makedirs(RESULT_DIR)
 
     # get data
-    data_train, data_test = load_raw(DATA_DIR)
+    data_train, data_test = load_raw(DATA_DIR) #DATA_DIR = Path("catenets/datasets/data/")
 
-    print('test\n', data_train)
-    
+    # print('test\n', data_train)
+
     out_file = open(RESULT_DIR / f"{file_name}.csv", "w", buffering=1)
     print(f"saving results to {out_file}")
     writer = csv.writer(out_file)
     header = (
-        ["exp", "cate_var_in", "cate_var_out", "y_var_in"]
-        + [name + "_in" for name in models.keys()]
-        + [name + "_out" for name in models.keys()]
+            ["exp", "cate_var_in", "cate_var_out", "y_var_in"]
+            + [name + "_in" for name in models.keys()]
+            + [name + "_out" for name in models.keys()]
     )
     writer.writerow(header)
 
@@ -162,7 +164,7 @@ def do_ihdp_experiments(
         )
 
         # NOTE: If setting is D, tau is changed to be additive in the potential outcomes. Not the setting of interest in our paper.
-        data_dict, ads_train = prepare_ihdp_pairnet_data(
+        data_dict, ads_train = prepare_bonus_pairnet_data(
             i_exp=i_exp,
             model_name=TARNET_NAME,
             data_train=data_exp,
@@ -189,9 +191,9 @@ def do_ihdp_experiments(
         pehe_out = []
 
         for model_name, estimator in models.items():
-            
+
             if model_name == PAIRNET_NAME:
-                data_dict, ads_train = prepare_ihdp_pairnet_data(
+                data_dict, ads_train = prepare_bonus_pairnet_data(
                     i_exp=i_exp,
                     model_name=PAIRNET_NAME,
                     data_train=data_exp,
@@ -200,18 +202,20 @@ def do_ihdp_experiments(
                     **pair_data_args,
                 )
 
-                X, y, w, cate_true_in, X_t, cate_true_out = (
+                X, y, w, cate_true_in, X_t, cate_true_out, w_t, y_t = (
                     data_dict["X"],
                     data_dict["y"],
                     data_dict["w"],
                     data_dict["cate_true_in"],
                     data_dict["X_t"],
                     data_dict["cate_true_out"],
+                    data_dict["w_t"],
+                    data_dict["y_t"],
                 )
-            
+
             try:
                 print(f"Experiment {i_exp}, with {model_name}")
-                estimator_temp = clone(estimator)
+                estimator_temp = clone(estimator) # 먼저 tarnet학습
                 estimator_temp.set_params(seed=0)
                 if model_name in model_hypers.keys():
                     if model_params is None:
@@ -229,10 +233,33 @@ def do_ihdp_experiments(
                 # fit estimator
                 if model_name in [PAIRNET_NAME]:
                     estimator_temp.agree_fit(ads_train)
-                else:
-                    estimator_temp.fit(X=X, y=y, w=w)
 
-                if model_name in [CFRNET_NAME, TARNET_NAME]:
+                    #### [DML estimation] ####
+                    # estimator_tmp : outcom regression과 covariate representation (phi)를 위한 학습된함수
+                    cate_pred_in, mu0, mu1 = estimator_temp.predict(X_t, return_po=True)
+                    phi_representation = estimator_temp.getrepr(X_t)  # PairNet에서 학습된 Representation
+
+                    # g_hat (E[Y|X])
+                    # g_hat = (1 - w) * mu0 + w * mu1
+
+                    # Propensity Score 모델에 phi_representation 사용
+                    propensity_model = LogisticRegression()
+                    w_flat = w_t.ravel() if len(w_t.shape) > 1 else w_t
+                    propensity_model.fit(phi_representation, w_flat)  # Representation 기반 학습
+                    e_hat = propensity_model.predict_proba(phi_representation)[:, 1]  # Propensity score 추정
+
+                    # DML 추정 수행
+                    theta_hat = double_ml(phi_representation, y_t, w_t, mu0, mu1, e_hat)
+                    print(f"[test] DML Estimate for Experiment {i_exp} : {theta_hat}")
+
+                    # WAAE 계산
+
+
+
+                else:
+                    estimator_temp.fit(X=X, y=y, w=w) # tarnet fit
+
+                if model_name in [TARNET_NAME]:
                     cate_pred_in, mu0_tr, mu1_tr = estimator_temp.predict(
                         X, return_po=True
                     )
@@ -240,7 +267,7 @@ def do_ihdp_experiments(
                         X_t, return_po=True
                     )
                     if save_reps:
-                        dump_reps(
+                        dump_reps( # Tarnet 모델 저장
                             setting,
                             model_name,
                             i_exp,
@@ -256,6 +283,8 @@ def do_ihdp_experiments(
                     cate_pred_in = estimator_temp.predict(X)
                     cate_pred_out = estimator_temp.predict(X_t)
 
+
+
                 if isinstance(cate_pred_in, torch.Tensor):
                     cate_pred_in = cate_pred_in.detach().numpy()
                 if isinstance(cate_pred_out, torch.Tensor):
@@ -267,6 +296,9 @@ def do_ihdp_experiments(
                 print(
                     f"Experiment {i_exp}, with {model_name} failed"
                 )
+                import traceback
+                print(f"Experiment {i_exp}, with {model_name} failed due to: {e}")
+                traceback.print_exc()  # 오류의 자세한 stack trace 출력
                 pehe_in.append(-1)
                 pehe_out.append(-1)
 
@@ -279,7 +311,7 @@ def do_ihdp_experiments(
 
 
 def dump_reps(
-    setting, model_name, i_exp, X, X_t, estimator_temp, mu0_tr, mu1_tr, mu0_te, mu1_te
+        setting, model_name, i_exp, X, X_t, estimator_temp, mu0_tr, mu1_tr, mu0_te, mu1_te
 ):
     trn_reps = estimator_temp.getrepr(X)
     tst_reps = estimator_temp.getrepr(X_t)
@@ -297,3 +329,36 @@ def dump_reps(
         repr_dir[model_name] / f"ihdp-{setting}-{i_exp}-tst.npy",
         tst_reps,
     )
+
+def double_ml(X, y, w, mu0, mu1, e_hat):
+    """
+    Perform Double Machine Learning (DML) estimation using precomputed g_hat and e_hat.
+
+    Parameters:
+    - X: ndarray, covariates (not used but kept for compatibility)
+    - y: ndarray, observed outcomes
+    - w: ndarray, treatment indicators
+    - g_hat: ndarray, predicted E[Y|X]
+    - e_hat: ndarray, predicted P(D=1|X)
+
+    Returns:
+    - theta_hat: float, treatment effect estimate
+    """
+    # # Compute doubly robust estimator
+    # dr_terms = (w * (y - g_hat) / e_hat) + g_hat
+    # theta_hat = dr_terms.mean()
+
+    # IPW terms
+    ipw_treated = (w * y) / e_hat
+    ipw_control = ((1 - w) * y) / (1 - e_hat)
+
+    # Regression terms
+    regression_term = mu1 - mu0
+
+    # Combine components
+    dr_estimator =  ipw_treated - ipw_control + regression_term
+
+    # Average over all samples
+    ate = dr_estimator.mean()
+    return ate
+
