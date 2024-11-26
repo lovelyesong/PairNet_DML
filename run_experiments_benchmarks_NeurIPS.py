@@ -55,6 +55,7 @@ if __name__ == "__main__":
             n_reps=args.n_reps,
             save_reps=True,
         )
+
     elif (args.experiment == "acic") or (args.experiment == "ACIC"):
         do_acic_experiments(
             file_name=args.file_name,

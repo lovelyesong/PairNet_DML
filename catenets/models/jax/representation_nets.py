@@ -1166,6 +1166,7 @@ class PairNet(BaseCATENet):
         self.patience = patience
         self.n_iter_min = n_iter_min
 
+
     def _get_train_function(self) -> Callable:
         return train_pairnet
 
@@ -1210,7 +1211,7 @@ def getrepr_pairnet(
     return z
     
 
-def train_pairnet(
+def train_pairnet( # 어떻게 PairNet 학습을 수행하는가?
     ads_trn: BaseTorchDataset,
     binary_y: bool = False,
     n_layers_r: int = DEFAULT_LAYERS_R,
@@ -1322,15 +1323,15 @@ def train_pairnet(
         z = pred_phi(params_phi, x)
         zp = pred_phi(params_phi, xp)
 
-        mu0z = pred_mu(params_mu0, z)
+        mu0z = pred_mu(params_mu0, z) # cf, mu0(trt=0)에 z(trt=1인 covariates)로 pred한 값
         mu0zp = pred_mu(params_mu0, zp)
         mu1z = pred_mu(params_mu1, z)
-        mu1zp = pred_mu(params_mu1, zp)
+        mu1zp = pred_mu(params_mu1, zp) # cf, mu1(trt=1)에 zp(trt=0인 covariates)로 pred한 값
 
         if not binary_y:
-            
-            gold_diff = (y - yp) * (2 * b - 1)
-            pred_diff = ((mu1z - mu0zp) * b) + ((mu1zp - mu0z) * (1 - b))
+
+            gold_diff = (y - yp) * (2 * b - 1) # 관찰된 factual
+            pred_diff = ((mu1z - mu0zp) * b) + ((mu1zp - mu0z) * (1 - b)) # factual간의 차 + Cfactual간의 차
             weights = jnp.ones_like(y)
             pairnet_loss = loss_agree(pred_diff, gold_diff, weights)
         else:

@@ -21,6 +21,10 @@ random.seed(0)
 
 TRAIN_DATASET = "bonus_data.train.npz"
 TEST_DATASET = "bonus_data.test.npz"
+
+# TRAIN_DATASET = "ihdp_npci_1-100.train.npz"
+# TEST_DATASET = "ihdp_npci_1-100.test.npz"
+
 TRAIN_URL = "https://www.fredjo.com/files/ihdp_npci_1-100.train.npz"
 TEST_URL = "https://www.fredjo.com/files/ihdp_npci_1-100.test.npz"
 
@@ -62,7 +66,7 @@ def load_data_npz(fname: Path, get_po: bool = True) -> dict:
 def prepare_bonus_data(
         data_train: dict,
         data_test: dict,
-        rescale: bool = False,
+        rescale: bool = False, #False,
         setting: str = "C",
         return_pos: bool = False,
 ) -> Tuple:
@@ -113,6 +117,7 @@ def prepare_bonus_data(
         data_test["mu0"],
         data_test["mu1"],
     )
+
     if setting == "D":
         y[w == 1] = y[w == 1] + mu0[w == 1]
         mu1 = mu0 + mu1
@@ -138,10 +143,10 @@ def prepare_bonus_data(
     cate_true_out = mu1_t - mu0_t
 
     if return_pos:
-        return X, y, w, cate_true_in, X_t, w_t, cate_true_out, mu0, mu1, mu0_t, mu1_t
+        return X, y, w, cate_true_in, X_t, w_t, cate_true_out, mu0, mu1, mu0_t, mu1_t, y_t
 
     else:
-        return X, y, w, cate_true_in, X_t, w_t, cate_true_out, y_t # add y_t
+        return X, y, w, cate_true_in, X_t, w_t, cate_true_out, y_t, mu0_t, mu1_t # add y_t
 
 
 def prepare_bonus_pairnet_data(
@@ -154,7 +159,8 @@ def prepare_bonus_pairnet_data(
         return_pos: bool = False,
         **kwargs,
 ):
-    X, y, beta, cate_true_in, X_test, beta_test, cate_true_out, y_t = prepare_bonus_data(
+    # beta_test : w_t
+    X, y, beta, cate_true_in, X_test, beta_test, cate_true_out, y_t, mu0_t, mu1_t  = prepare_bonus_data(
         data_train,
         data_test,
         rescale=rescale,
@@ -168,18 +174,19 @@ def prepare_bonus_pairnet_data(
         tar_path = Path(
             "results/experiments_benchmarking/ihdp/TARNet"
         )
+        # 어떤 파일을 로드하는지 확인해봐야함 (방금 tarnet에서 나온 결과 모델인지, 이전 결과를 잘못 학습해서 돌리고 있는건지)
         tar_train = np.load(tar_path / f"ihdp-{setting}-{i_exp}-trn.npy")
         tar_test = np.load(tar_path / f"ihdp-{setting}-{i_exp}-tst.npy")
-        print(f"Loaded Embeddings from {str(tar_path)}")
+        print(f"Loaded Embeddings from {str(tar_path)}, exp number: {str(i_exp)}")
 
         tar_train_emb = tar_train[:, :-2]
         tar_test_emb = tar_test[:, :-2]
 
-        ads_train = PairDataset(
-            X=X,
-            beta=beta,
-            y=y,
-            xemb=tar_train_emb,
+        ads_train = PairDataset( # tarnet model embedding
+            X=X, # covariates
+            beta=beta, # trt
+            y=y, # outcome
+            xemb=tar_train_emb, # TarNet model
             **kwargs,
         )
 
@@ -192,7 +199,9 @@ def prepare_bonus_pairnet_data(
             "X_t": X_test,
             "w_t": beta_test,
             "cate_true_out": cate_true_out,
-            "y_t" : y_t
+            "y_t" : y_t,
+            "mu0_t" : mu0_t,
+            "mu1_t" : mu1_t
         }, #X, y, beta, cate_true_in, X_test, beta_test, cate_true_out, y_t
         ads_train,
     )

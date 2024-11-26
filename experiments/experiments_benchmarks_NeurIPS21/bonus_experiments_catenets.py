@@ -9,6 +9,7 @@ from catenets.models.torch import representation_nets as torch_nets
 import copy
 import torch
 from sklearn.linear_model import LogisticRegression
+# from xgboost import XGBRegressor
 from sklearn.model_selection import KFold
 
 import numpy as np
@@ -60,7 +61,8 @@ for v in repr_dir.values():
 
 SEP = "_"
 
-PARAMS_DEPTH = {"n_layers_r": 3, "n_layers_out": 2}
+PARAMS_DEPTH = {"n_layers_r": 2, #3
+                "n_layers_out": 1} #2
 PARAMS_DEPTH_2 = {
     "n_layers_r": 3,
     "n_layers_out": 2,
@@ -72,7 +74,7 @@ model_hypers = {
     # CFRNET_NAME: {"penalty_disc": 0.1},
     PAIRNET_NAME: {
         "penalty_disc": 0.0,
-        "penalty_l2": 1.0,
+        "penalty_l2": 1, # 1.0
     },
 }
 
@@ -173,13 +175,15 @@ def do_bonus_experiments(
             **pair_data_args,
         )
 
-        X, y, w, cate_true_in, X_t, cate_true_out = (
+
+        X, y, w, cate_true_in, X_t, cate_true_out, y_t = (
             data_dict["X"],
             data_dict["y"],
             data_dict["w"],
             data_dict["cate_true_in"],
             data_dict["X_t"],
             data_dict["cate_true_out"],
+            data_dict["y_t"],
         )
 
         # compute some stats
@@ -191,7 +195,6 @@ def do_bonus_experiments(
         pehe_out = []
 
         for model_name, estimator in models.items():
-
             if model_name == PAIRNET_NAME:
                 data_dict, ads_train = prepare_bonus_pairnet_data(
                     i_exp=i_exp,
@@ -202,16 +205,31 @@ def do_bonus_experiments(
                     **pair_data_args,
                 )
 
-                X, y, w, cate_true_in, X_t, cate_true_out, w_t, y_t = (
+                # X, y, w, cate_true_in, X_t, w_t, cate_true_out, y_t, mu0_t, mu1_t = (
+                #     data_dict["X"],
+                #     data_dict["y"],
+                #     data_dict["w"],
+                #     data_dict["cate_true_in"],
+                #     data_dict["X_t"],
+                #     data_dict["w_t"],
+                #     data_dict["cate_true_out"],
+                #     data_dict["y_t"],
+                #     data_dict["mu0_t"],
+                #     data_dict["mu1_t"],
+                # )
+
+                X, y, w, cate_true_in, X_t, cate_true_out, w_t, y_t, mu0_t, mu1_t = (
                     data_dict["X"],
                     data_dict["y"],
                     data_dict["w"],
                     data_dict["cate_true_in"],
                     data_dict["X_t"],
                     data_dict["cate_true_out"],
-                    data_dict["w_t"],
-                    data_dict["y_t"],
-                )
+                    data_dict["w_t"], #
+                    data_dict["y_t"], #
+                    data_dict["mu0_t"], #
+                    data_dict["mu1_t"], #
+                ) # y_t, mu0_t, mu1_t 추가 추출
 
             try:
                 print(f"Experiment {i_exp}, with {model_name}")
@@ -232,11 +250,11 @@ def do_bonus_experiments(
 
                 # fit estimator
                 if model_name in [PAIRNET_NAME]:
-                    estimator_temp.agree_fit(ads_train)
+                    estimator_temp.agree_fit(ads_train) # Base_catenet.agree_fit -> Base_catenet.train_func -> PairNet.predict_pairnet
 
                     #### [DML estimation] ####
                     # estimator_tmp : outcom regression과 covariate representation (phi)를 위한 학습된함수
-                    cate_pred_in, mu0, mu1 = estimator_temp.predict(X_t, return_po=True)
+                    cate_pred_in, mu0_hat, mu1_hat = estimator_temp.predict(X_t, return_po=True)
                     phi_representation = estimator_temp.getrepr(X_t)  # PairNet에서 학습된 Representation
 
                     # g_hat (E[Y|X])
@@ -244,17 +262,47 @@ def do_bonus_experiments(
 
                     # Propensity Score 모델에 phi_representation 사용
                     propensity_model = LogisticRegression()
+                    # propensity_model = XGBRegressor()
                     w_flat = w_t.ravel() if len(w_t.shape) > 1 else w_t
                     propensity_model.fit(phi_representation, w_flat)  # Representation 기반 학습
                     e_hat = propensity_model.predict_proba(phi_representation)[:, 1]  # Propensity score 추정
 
                     # DML 추정 수행
-                    theta_hat = double_ml(phi_representation, y_t, w_t, mu0, mu1, e_hat)
-                    print(f"[test] DML Estimate for Experiment {i_exp} : {theta_hat}")
+                    # theta_hat = double_ml(phi_representation, y_t, w_t, mu0_hat, mu1_hat, e_hat)
+                    # print(f"[test] DML Causal Effect Estimate for Experiment {i_exp} : {theta_hat}")
+                    w_t_flat = w_t.flatten()
+                    idx_w0 = np.where(w_t_flat == 0)[0]
+                    idx_w1 = np.where(w_t_flat == 1)[0]
 
-                    # WAAE 계산
+                    # w_t == 0
+                    phi_representation_w0 = phi_representation[idx_w0]
+                    y_t_w0 = y_t[idx_w0]
+                    mu0_hat_w0 = mu0_hat[idx_w0]
+                    mu1_hat_w0 = mu1_hat[idx_w0]
+                    e_hat_w0 = e_hat[idx_w0]
+                    w_t_w0 = w_t[idx_w0]
 
+                    # w_t == 1
+                    phi_representation_w1 = phi_representation[idx_w1]
+                    y_t_w1 = y_t[idx_w1]
+                    mu1_hat_w1 = mu1_hat[idx_w1]
+                    mu0_hat_w1 = mu0_hat[idx_w1]
+                    e_hat_w1 = e_hat[idx_w1]
+                    w_t_w1 = w_t[idx_w1]
 
+                    # dml estimator
+                    tau1_hat = double_ml(phi_representation_w1, y_t_w1, w_t_w1, mu0_hat_w1, mu1_hat_w1, e_hat_w1)
+                    tau0_hat = double_ml(phi_representation_w0, y_t_w0, w_t_w0, mu0_hat_w0, mu1_hat_w0, e_hat_w0)
+
+                    # WAAE
+                    flat_arr = w_t.flatten()
+                    count_0 = np.sum(flat_arr == 0)
+                    count_1 = np.sum(flat_arr == 1)
+                    ratio_D0 = count_0 / len(w_t)
+                    ratio_D1 = count_1 / len(w_t)
+
+                    waae = (np.abs(tau0_hat.mean() - mu0_t.mean()) * ratio_D0) + (np.abs(tau1_hat.mean() - mu1_t.mean()) * ratio_D1)
+                    print(f"WAAE : {waae}")
 
                 else:
                     estimator_temp.fit(X=X, y=y, w=w) # tarnet fit
@@ -283,8 +331,6 @@ def do_bonus_experiments(
                     cate_pred_in = estimator_temp.predict(X)
                     cate_pred_out = estimator_temp.predict(X_t)
 
-
-
                 if isinstance(cate_pred_in, torch.Tensor):
                     cate_pred_in = cate_pred_in.detach().numpy()
                 if isinstance(cate_pred_out, torch.Tensor):
@@ -297,7 +343,7 @@ def do_bonus_experiments(
                     f"Experiment {i_exp}, with {model_name} failed"
                 )
                 import traceback
-                print(f"Experiment {i_exp}, with {model_name} failed due to: {e}")
+                # print(f"Experiment {i_exp}, with {model_name} failed due to: {e}")
                 traceback.print_exc()  # 오류의 자세한 stack trace 출력
                 pehe_in.append(-1)
                 pehe_out.append(-1)

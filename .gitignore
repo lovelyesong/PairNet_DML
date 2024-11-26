@@ -6,4 +6,5 @@ catenets/datasets/data/bonus_data.train.npz
 catenets/datasets/data/bonus_data.test.npz
 catenets/datasets/data/ihdp_npci_1-100.train.npz
 catenets/datasets/data/ihdp_npci_1-100.test.npz
-
+*.npz
+*.pyc

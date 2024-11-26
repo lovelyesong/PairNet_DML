@@ -32,6 +32,11 @@ class BaseTorchDataset(torch.utils.data.Dataset, ABC):
         self.Xemb = torch.Tensor(xemb)
         self.bad_indices = []
 
+        #X=X, # covariates
+        #beta=beta, # trt
+        #y=y, # outcome
+        #xemb=tar_train_emb, # TarNet model
+
         self.emb_dim = self.Xemb.shape[-1]
 
         self.one_idxs = torch.where(self.beta == 1)[0]
@@ -270,6 +275,10 @@ class PairDataset(BaseTorchDataset):
         if self.arbitrary_pairs == True:
             print("Using arbitrary pairs")
         super().__init__(X, beta, y, xemb, **kwargs)
+        # self.X = torch.Tensor(X)
+        # self.beta = torch.Tensor(beta).view(-1, 1)
+        # self.y = torch.Tensor(y).view(-1, 1)
+        # self.Xemb = torch.Tensor(xemb)
 
     def create_cf_idx(self, idx, num_pairs):
         """Creates a cache for the countreffactual set to be used while training.

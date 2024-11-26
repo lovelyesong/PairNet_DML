@@ -105,7 +105,7 @@ def prepare_ihdp_data(
         data_train["mu1"],
     )
 
-    X_t, _, w_t, mu0_t, mu1_t = (
+    X_t, y_t, w_t, mu0_t, mu1_t = (
         data_test["X"],
         data_test["y"],
         data_test["w"],
@@ -139,8 +139,8 @@ def prepare_ihdp_data(
     if return_pos:
         return X, y, w, cate_true_in, X_t, w_t, cate_true_out, mu0, mu1, mu0_t, mu1_t
 
-    else:
-        return X, y, w, cate_true_in, X_t, w_t, cate_true_out
+    else: # y_t, mu_t들
+        return X, y, w, cate_true_in, X_t, w_t, cate_true_out, y_t, mu0_t, mu1_t
 
 
 def prepare_ihdp_pairnet_data(
@@ -153,7 +153,9 @@ def prepare_ihdp_pairnet_data(
     return_pos: bool = False,
     **kwargs,
 ):
-    X, y, beta, cate_true_in, X_test, beta_test, cate_true_out = prepare_ihdp_data(
+    # y_t 추가
+    X, y, beta, cate_true_in, X_test, beta_test, cate_true_out, y_t, mu0_t, mu1_t\
+        = prepare_ihdp_data(
         data_train,
         data_test,
         rescale=rescale,
@@ -192,6 +194,9 @@ def prepare_ihdp_pairnet_data(
             "X_t": X_test,
             "w_t": beta_test,
             "cate_true_out": cate_true_out,
+            "y_t" : y_t,
+            "mu0_t" : mu0_t,
+            "mu1_t": mu1_t,
         },
         ads_train,
     )

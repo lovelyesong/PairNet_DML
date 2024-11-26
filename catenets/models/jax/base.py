@@ -298,7 +298,7 @@ class BaseCATENet(BaseEstimator, RegressorMixin, abc.ABC):
         """
         X = check_X_is_np(X)
         predict_func = self._get_predict_function()
-        return predict_func(
+        return predict_func( # predict_pairnet를 get함
             X,
             trained_params=self._params,
             predict_funs=self._predict_funs,

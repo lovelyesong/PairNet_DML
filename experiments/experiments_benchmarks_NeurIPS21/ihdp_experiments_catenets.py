@@ -8,6 +8,7 @@ from typing import Optional, Union
 from catenets.models.torch import representation_nets as torch_nets
 import copy
 import torch
+from sklearn.linear_model import LogisticRegression
 
 import numpy as np
 from sklearn import clone
@@ -91,17 +92,17 @@ def dict_to_str(dict):
 
 
 ALL_MODELS = {
-    T_NAME: TNet(**PARAMS_DEPTH),
+    # T_NAME: TNet(**PARAMS_DEPTH),
     TARNET_NAME: TARNet(**PARAMS_DEPTH),
-    CFRNET_NAME: CFRNet(**PARAMS_DEPTH),
+    # CFRNET_NAME: CFRNet(**PARAMS_DEPTH),
     PAIRNET_NAME: PairNet(**PARAMS_DEPTH),
-    RNET_NAME: RNet(**PARAMS_DEPTH_2),
-    XNET_NAME: XNet(**PARAMS_DEPTH_2),
-    FLEXTE_NAME: FlexTENet(
-        penalty_orthogonal=PENALTY_ORTHOGONAL, penalty_l2_p=PENALTY_DIFF, **PARAMS_DEPTH
-    ),
-    DRNET_NAME: DRNet(first_stage_strategy="Tar", **PARAMS_DEPTH_2),
-    DRAGON_NAME: DragonNet(**PARAMS_DEPTH),
+    # RNET_NAME: RNet(**PARAMS_DEPTH_2),
+    # XNET_NAME: XNet(**PARAMS_DEPTH_2),
+    # FLEXTE_NAME: FlexTENet(
+    #     penalty_orthogonal=PENALTY_ORTHOGONAL, penalty_l2_p=PENALTY_DIFF, **PARAMS_DEPTH
+    # ),
+    # DRNET_NAME: DRNet(first_stage_strategy="Tar", **PARAMS_DEPTH_2),
+    # DRAGON_NAME: DragonNet(**PARAMS_DEPTH),
 }
 
 
@@ -115,8 +116,8 @@ def do_ihdp_experiments(
     save_reps: bool = False,
 ) -> None:
     if models is None:
-        # models = ALL_MODELS
-        models = {PAIRNET_NAME: PairNet(**PARAMS_DEPTH)}
+        models = ALL_MODELS
+        # models = {PAIRNET_NAME: PairNet(**PARAMS_DEPTH)}
 
     if (setting == "original") or (setting == "C"):
         setting = "C"
@@ -133,8 +134,6 @@ def do_ihdp_experiments(
 
     # get data
     data_train, data_test = load_raw(DATA_DIR)
-
-    print('test\n', data_train)
     
     out_file = open(RESULT_DIR / f"{file_name}.csv", "w", buffering=1)
     print(f"saving results to {out_file}")
@@ -189,7 +188,7 @@ def do_ihdp_experiments(
         pehe_out = []
 
         for model_name, estimator in models.items():
-            
+            print(f"model name : {model_name}")
             if model_name == PAIRNET_NAME:
                 data_dict, ads_train = prepare_ihdp_pairnet_data(
                     i_exp=i_exp,
@@ -200,15 +199,19 @@ def do_ihdp_experiments(
                     **pair_data_args,
                 )
 
-                X, y, w, cate_true_in, X_t, cate_true_out = (
+                X, y, w, cate_true_in, X_t, cate_true_out, w_t, y_t, mu0_t, mu1_t = (
                     data_dict["X"],
                     data_dict["y"],
                     data_dict["w"],
                     data_dict["cate_true_in"],
                     data_dict["X_t"],
                     data_dict["cate_true_out"],
-                )
-            
+                    data_dict["w_t"],
+                    data_dict["y_t"],
+                    data_dict["mu0_t"],
+                    data_dict["mu1_t"],
+                ) # mu0_t, mu1_t : where are these from?
+
             try:
                 print(f"Experiment {i_exp}, with {model_name}")
                 estimator_temp = clone(estimator)
@@ -228,7 +231,68 @@ def do_ihdp_experiments(
 
                 # fit estimator
                 if model_name in [PAIRNET_NAME]:
+                    print('test : pre fit')
                     estimator_temp.agree_fit(ads_train)
+
+                    # estimator mu0_hat, mu1_hat 검증을 위하여
+                    # 만약 return_po
+                    cate_pred_in, mu0_hat_tr, mu1_hat_tr = estimator_temp.predict(X, return_po=True)
+                    # cate_pred_out, mu0_hat_tst, mu1_hat_tst = estimator_temp.predict(X_t, return_po=True)
+
+                    #### [DML estimation] ####
+                    # estimator_tmp : outcom regression과 covariate representation (phi)를 위한 학습된함수
+                    cate_pred_in, mu0_hat, mu1_hat = estimator_temp.predict(X_t, return_po=True)
+                    phi_representation = estimator_temp.getrepr(X_t)  # PairNet에서 학습된 Representation
+
+                    # g_hat (E[Y|X])
+                    # g_hat = (1 - w) * mu0 + w * mu1
+
+                    # Propensity Score 모델에 phi_representation 사용
+                    propensity_model = LogisticRegression()
+                    # propensity_model = XGBRegressor()
+                    w_flat = w_t.ravel() if len(w_t.shape) > 1 else w_t
+                    propensity_model.fit(phi_representation, w_flat)  # Representation 기반 학습
+                    e_hat = propensity_model.predict_proba(phi_representation)[:, 1]  # Propensity score 추정
+
+                    # DML 추정 수행
+                    # theta_hat = double_ml(phi_representation, y_t, w_t, mu0_hat, mu1_hat, e_hat)
+                    # print(f"[test] DML Causal Effect Estimate for Experiment {i_exp} : {theta_hat}")
+                    w_t_flat = w_t.flatten()
+                    idx_w0 = np.where(w_t_flat == 0)[0]
+                    idx_w1 = np.where(w_t_flat == 1)[0]
+
+                    # w_t == 0
+                    phi_representation_w0 = phi_representation[idx_w0]
+                    y_t_w0 = y_t[idx_w0]
+                    mu0_hat_w0 = mu0_hat[idx_w0]
+                    mu1_hat_w0 = mu1_hat[idx_w0]
+                    e_hat_w0 = e_hat[idx_w0]
+                    w_t_w0 = w_t[idx_w0]
+
+                    # w_t == 1
+                    phi_representation_w1 = phi_representation[idx_w1]
+                    y_t_w1 = y_t[idx_w1]
+                    mu1_hat_w1 = mu1_hat[idx_w1]
+                    mu0_hat_w1 = mu0_hat[idx_w1]
+                    e_hat_w1 = e_hat[idx_w1]
+                    w_t_w1 = w_t[idx_w1]
+
+                    # dml estimator
+                    tau1_hat = double_ml(phi_representation_w1, y_t_w1, w_t_w1, mu0_hat_w1, mu1_hat_w1, e_hat_w1)
+                    tau0_hat = double_ml(phi_representation_w0, y_t_w0, w_t_w0, mu0_hat_w0, mu1_hat_w0, e_hat_w0)
+
+                    # WAAE
+                    flat_arr = w_t.flatten()
+                    count_0 = np.sum(flat_arr == 0)
+                    count_1 = np.sum(flat_arr == 1)
+                    ratio_D0 = count_0 / len(w_t)
+                    ratio_D1 = count_1 / len(w_t)
+
+                    waae = (np.abs(tau0_hat.mean() - mu0_t.mean()) * ratio_D0) + (np.abs(tau1_hat.mean() - mu1_t.mean()) * ratio_D1)
+                    print(f"WAAE : {waae}")
+
+                    print('!!test!!')
+
                 else:
                     estimator_temp.fit(X=X, y=y, w=w)
 
@@ -253,6 +317,7 @@ def do_ihdp_experiments(
                             mu1_te,
                         )
                 else:
+                    # idhp 데이터의 prediction
                     cate_pred_in = estimator_temp.predict(X)
                     cate_pred_out = estimator_temp.predict(X_t)
 
@@ -297,3 +362,36 @@ def dump_reps(
         repr_dir[model_name] / f"ihdp-{setting}-{i_exp}-tst.npy",
         tst_reps,
     )
+
+
+def double_ml(X, y, w, mu0, mu1, e_hat):
+    """
+    Perform Double Machine Learning (DML) estimation using precomputed g_hat and e_hat.
+
+    Parameters:
+    - X: ndarray, covariates (not used but kept for compatibility)
+    - y: ndarray, observed outcomes
+    - w: ndarray, treatment indicators
+    - g_hat: ndarray, predicted E[Y|X]
+    - e_hat: ndarray, predicted P(D=1|X)
+
+    Returns:
+    - theta_hat: float, treatment effect estimate
+    """
+    # # Compute doubly robust estimator
+    # dr_terms = (w * (y - g_hat) / e_hat) + g_hat
+    # theta_hat = dr_terms.mean()
+
+    # IPW terms
+    ipw_treated = (w * y) / e_hat
+    ipw_control = ((1 - w) * y) / (1 - e_hat)
+
+    # Regression terms
+    regression_term = mu1 - mu0
+
+    # Combine components
+    dr_estimator =  ipw_treated - ipw_control + regression_term
+
+    # Average over all samples
+    ate = dr_estimator.mean()
+    return ate
