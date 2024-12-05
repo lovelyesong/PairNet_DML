@@ -19,8 +19,8 @@ from catenets.models.jax import PAIRNET_NAME
 np.random.seed(0)
 random.seed(0)
 
-TRAIN_DATASET = "bonus_data.train.npz"
-TEST_DATASET = "bonus_data.test.npz"
+TRAIN_DATASET = "bonus_data.train_bootstrap.npz" #"bonus_data.train.npz"
+TEST_DATASET = "bonus_data.test_bootstrap.npz" #"bonus_data.test.npz"
 
 # TRAIN_DATASET = "ihdp_npci_1-100.train.npz"
 # TEST_DATASET = "ihdp_npci_1-100.test.npz"

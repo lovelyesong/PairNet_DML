@@ -183,6 +183,13 @@ def do_bonus_experiments(
         raise ValueError(
             "n_exp should be either an integer or a list of integers."
         )
+
+    ate_pairnet_dml_list = [] # for bootstrap
+    ate_pairnet_list = [] # for bootstrap
+    ate_pairnet_mumodel_list = [] # for bootstrap
+    ate_pairnet_dml_mumodel_list = [] # for bootstrap
+    waae_list = []
+
     for i_exp in experiment_loop:
         # get data
         data_exp = get_one_data_set(data_train, i_exp=i_exp, get_po=True)
@@ -346,20 +353,27 @@ def do_bonus_experiments(
                     # tau1_hat = double_ml(phi_representation_w1, y_t_w1, w_t_w1, mu0_hat_w1, mu1_hat_w1, e_hat_w1)
                     # tau0_hat = double_ml(phi_representation_w0, y_t_w0, w_t_w0, mu0_hat_w0, mu1_hat_w0, e_hat_w0)
 
-                    # ATE
-                    # # PairNet+DML ATE ATE : -0.04787540063261986
-                    # tau_hat =  double_ml(phi_representation, y_t, w_t_flat, mu0_hat, mu1_hat, e_hat)
-                    # print(f"PairNet+DML ATE : {tau_hat}")
 
-                    # # PairNet ATE : PairNet ATE : -0.17016984522342682
-                    # print(f"PairNet ATE : {cate_pred_out.mean()}")
-                    # #
-                    # # PairNet w/ Mu modeling ATE : PairNet w/ Mu modeling ATE : -0.09951705485582352
-                    # print(f"PairNet w/ Mu modeling ATE : {(mu1_ - mu0_).mean()}")
-                    #
-                    # PairNet+DML w/ Mu modeling ATE
-                    tau_hat_mumodel = double_ml(phi_representation, y_t, w_t_flat, mu0_, mu1_, e_hat)
-                    print(f"PairNet+DML w/ Mu modeling ATE : {tau_hat_mumodel}")
+                    #ATE
+                    # 1. PairNet+DML ATE ATE : -0.04787540063261986
+                    tau_hat =  double_ml(phi_representation, y_t, w_t_flat, mu0_hat, mu1_hat, e_hat)
+                    #print(f"PairNet+DML ATE : {tau_hat}")
+                    ate_pairnet_dml_list.append(tau_hat)
+
+                    # 2. PairNet ATE : PairNet ATE : -0.17016984522342682
+                    cate_pred_out_mean = cate_pred_out.mean()
+                    #print(f"PairNet ATE : {cate_pred_out_mean}")
+                    ate_pairnet_list.append(cate_pred_out_mean)
+
+                    # 3. PairNet w/ Mu modeling ATE : PairNet w/ Mu modeling ATE : -0.09951705485582352
+                    mu_model_ate = (mu1_ - mu0_).mean()
+                    #print(f"PairNet w/ Mu modeling ATE : {mu_model_ate}")
+                    ate_pairnet_mumodel_list.append(mu_model_ate)
+
+                    # 4. PairNet+DML w/ Mu modeling ATE
+                    tau_hat_mumodel = double_ml_tensor(phi_representation, y_t, w_t_flat, mu0_, mu1_, e_hat)
+                    #print(f"PairNet+DML w/ Mu modeling ATE : {tau_hat_mumodel}")
+                    ate_pairnet_dml_mumodel_list.append(tau_hat_mumodel)
 
                     # 1. dml estimator separately -> WAAE : 3.08741815876354
                     # tau1_hat = dml_sep(phi_representation_w1, y_t_w1, w_t_w1, mu1_hat_w1, e_hat_w1) # treatment
@@ -388,7 +402,8 @@ def do_bonus_experiments(
 
                     # PairNet-DML WAAE
                     waae = (np.abs(tau0_hat.mean() - mu0_t.mean()) * ratio_D0) + (np.abs(tau1_hat.mean() - mu1_t.mean()) * ratio_D1)
-                    print(f"WAAE : {waae}")
+                    # print(f"WAAE : {waae}")
+                    waae_list.append(waae)
 
                     # # PairNet WAAE : WAAE for PairNet: 1.8299227201860715
                     # pairnet_waae = (np.abs(mu0_hat_w0.mean() - mu0_t.mean()) * ratio_D0) + (np.abs(mu1_hat_w1.mean() - mu1_t.mean()) * ratio_D1)
@@ -455,6 +470,13 @@ def do_bonus_experiments(
         )
     out_file.close()
 
+    print(f"Bootstrapped PairNet+DML ATE : {np.array(ate_pairnet_dml_list).mean()}")  # for bootstrap
+    print(f"Bootstrapped PairNet ATE : {np.array(ate_pairnet_list).mean()}")
+    print(f"Bootstrapped PairNet w/ Mu modeling ATE : {np.array(ate_pairnet_mumodel_list).mean()}")
+    print(f"Bootstrapped PairNet+DML w/ Mu modeling ATE : {np.array(ate_pairnet_dml_mumodel_list).mean()}")
+    print(f"Bootstrapped PairNet+DML+Mumodel WAAE : {np.array(waae_list).mean()}")
+
+
 
 def dump_reps(
         setting, model_name, i_exp, X, X_t, estimator_temp, mu0_tr, mu1_tr, mu0_te, mu1_te
@@ -520,6 +542,49 @@ def double_ml(X, y, w, mu0, mu1, e_hat):
     e_hat = e_hat.reshape(-1, 1)  # (1530, 1)
 
     # 아래 세개 딥러닝 넣었다 나온 파라미터 쓸 때 꼭 쓰기..tensor -> numpy
+    # y = y.reshape(-1, 1)
+    # mu0 = mu0.numpy().reshape(-1, 1)
+    # mu1 = mu1.numpy().reshape(-1, 1)
+
+    # IPW terms
+    # ipw_treated = (w * y) / e_hat
+    # ipw_control = ((1 - w) * y) / (1 - e_hat)
+
+    ipw_treated = (w * (y - mu1)) / e_hat
+    ipw_control = ((1 - w) * (y - mu0)) / (1 - e_hat)
+
+    # Regression terms
+    regression_term = mu1 - mu0  #cate_pred_out
+
+    # Combine components
+    dr_estimator =  ipw_treated - ipw_control + regression_term
+
+    # Average over all samples
+    ate = dr_estimator.mean()
+    return ate #dr_estimator
+
+def double_ml_tensor(X, y, w, mu0, mu1, e_hat):
+    """
+    Perform Double Machine Learning (DML) estimation using precomputed g_hat and e_hat.
+
+    Parameters:
+    - X: ndarray, covariates (not used but kept for compatibility)
+    - y: ndarray, observed outcomes
+    - w: ndarray, treatment indicators
+    - g_hat: ndarray, predicted E[Y|X]
+    - e_hat: ndarray, predicted P(D=1|X)
+
+    Returns:
+    - theta_hat: float, treatment effect estimate
+    """
+    # # Compute doubly robust estimator
+    # dr_terms = (w * (y - g_hat) / e_hat) + g_hat
+    # theta_hat = dr_terms.mean()
+
+    w = w.reshape(-1, 1)  # (1530, 1)
+    e_hat = e_hat.reshape(-1, 1)  # (1530, 1)
+
+    # 아래 세개 딥러닝 넣었다 나온 파라미터 쓸 때 꼭 쓰기..tensor -> numpy
     y = y.reshape(-1, 1)
     mu0 = mu0.numpy().reshape(-1, 1)
     mu1 = mu1.numpy().reshape(-1, 1)
@@ -540,7 +605,6 @@ def double_ml(X, y, w, mu0, mu1, e_hat):
     # Average over all samples
     ate = dr_estimator.mean()
     return ate #dr_estimator
-
 
 def res_calibration(X, y, mu_hat):
     # Step 1: Residuals 계산
@@ -610,9 +674,9 @@ def cate_residualNet(phi_representation, y_t_w1, y_t_w0, cate_pred_out, idx_w0, 
 
         mu1_pred = mu1_model(X_tensor)
         mu0_pred = mu0_model(X_tensor)
-
         X_tensor_1 = X_tensor[idx_w1]  # w=1 데이터
         X_tensor_0 = X_tensor[idx_w0]  # w=0 데이터
+
         mu1_pred_1 = mu1_model(X_tensor_1)
         mu0_pred_0 = mu0_model(X_tensor_0)
 
