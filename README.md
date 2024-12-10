@@ -21,6 +21,11 @@ pip install ott-jax
 
 # Binary Experiments:
 
+## Bonus
+```
+python run_experiments_benchmarks_NeurIPS.py --experiment bonus --file_name pairnet --n_exp 500
+```
+
 ## IHDP
 ```
 python run_experiments_benchmarks_NeurIPS.py --experiment ihdp --file_name pairnet --n_exp 100
