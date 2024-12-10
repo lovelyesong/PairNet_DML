@@ -21,7 +21,7 @@ pip install ott-jax
 
 # Binary Experiments:
 
-## Bonus
+## Bonus (This is for PairNet_DML)
 ```
 python run_experiments_benchmarks_NeurIPS.py --experiment bonus --file_name pairnet --n_exp 500
 ```
