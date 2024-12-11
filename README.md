@@ -22,7 +22,7 @@ pip install ott-jax
 # Binary Experiments:
 
 ## Bonus (This is for PairNet_DML)
-# To run this, generate dataset first using "fetch_bonus.ipynb"
+#### To run this, generate dataset first using "fetch_bonus.ipynb"
 ```
 python run_experiments_benchmarks_NeurIPS.py --experiment bonus --file_name pairnet --n_exp 500
 ```
